@@ -236,6 +236,20 @@ function DiagSection() {
   </section>`;
 }
 
+function formatCacheBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = -1;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unit]}`;
+}
+
 /**
  * Optional persistent resource cache. The normal HTTP cache still works without this section; the app cache is
  * explicit so a player on a small server can choose whether to spend the bandwidth before entering a match.
@@ -348,7 +362,7 @@ function CacheSection() {
           <input type="checkbox" checked=${selected.includes(g.id)} disabled=${!!working}
             onChange=${(e) => setGroup(g.id, e.currentTarget.checked)} />
           <span class="set-cache__name">${t(g.label)}<${MicroLabel}>${g.micro}<//></span>
-          <span class="set-cache__count num">${g.cached}/${g.total}</span>
+          <span class="set-cache__count num">${formatCacheBytes(g.cachedBytes)} / ${g.sizeKnown ? formatCacheBytes(g.bytes) : '—'}</span>
         </label>
       </li>`)}
     </ul>` : html`<p class="set-hint">${t('正在读取资源清单…')}</p>`}
@@ -386,7 +400,6 @@ export function SettingsModal({ open, onClose }) {
         <${LangToggle} class="set-lang" />
       </div>
       ${mtNote ? html`<p class="set-hint set-lang-note" data-testid="lang-mt-note">${mtNote}</p>` : null}
-      <${CacheSection} />
       <${Slider} label=${t('背景音乐')} micro="BGM" icon="play" value=${s.bgm} onInput=${(v) => updateSettings({ bgm: v })} />
       <${Slider} label=${t('干员语音')} micro="VOICE" icon="mic" value=${s.voice} onInput=${(v) => updateSettings({ voice: v })} />
       <div class="set-row">
@@ -420,6 +433,7 @@ export function SettingsModal({ open, onClose }) {
       </div>
       <p class="set-hint set-textsize-note">${t('调整界面文字大小，棋盘保持原比例。')}</p>
       <${HotkeySection} keys=${s.keys} touchUi=${touchUi} />
+      <${CacheSection} />
       <${DiagSection} />
       <p class="set-hint">${touchUi ? t('触屏操作：点击单位选中（撤退 / 出售）· 长按单位或卡牌查看详情 · 拖动部署后滑动选择朝向') : t('右键查看详情')}</p>
     </div>

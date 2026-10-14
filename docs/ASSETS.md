@@ -510,9 +510,11 @@ builds groups from `data/assets.json` and `data/local-assets.json`: core data, U
 enemy/battle resources, music/SFX, Chinese voices, Japanese voices and local-client art. Selected URLs are downloaded
 with four concurrent requests into a versioned Cache Storage namespace (`public/sw.js`); the worker reads those entries
 but does not cache ordinary requests automatically. A release's `APP_VERSION` changes the namespace, so an update does
-not serve an older app-owned entry. HTTPS or localhost is required for persistent Cache Storage; an HTTP LAN address
-falls back to warming the browser's normal HTTP cache, where the browser controls clearing. The section can clear the
-selected groups or the whole app namespace and does not touch browser data belonging to other sites.
+not serve an older app-owned entry. The Node server exposes `/data/cache-sizes.json` so the panel can show the
+on-disk byte total and the cached byte total instead of only file counts; static hosts without that endpoint show an
+unknown total. HTTPS or localhost is required for persistent Cache Storage; an HTTP LAN address falls back to warming
+the browser's normal HTTP cache, where the browser controls clearing. The section can clear the selected groups or the
+whole app namespace and does not touch browser data belonging to other sites.
 
 ## Verification
 

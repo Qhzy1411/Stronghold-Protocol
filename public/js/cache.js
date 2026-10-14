@@ -6,44 +6,28 @@
 
 import { APP_VERSION } from '../../shared/constants.js';
 import { N_ } from '../../shared/i18n.js';
+import {
+  CACHE_CORE_URLS, cacheGroupOf, normalizeCacheUrl,
+} from '../../shared/cacheGroups.js';
 import { data } from './data.js';
 
 export const RESOURCE_CACHE_NAME = `sp-preload-${APP_VERSION}`;
-const CACHE_PREFIX = 'sp-preload-';
 const MAX_CONCURRENCY = 4;
-
-const DATA_URLS = [
-  ['config', 'config.json'], ['assets', 'assets.json'], ['chess', 'chess.json'], ['bonds', 'bonds.json'],
-  ['items', 'items.json'], ['bands', 'bands.json'], ['enemies', 'enemies.json'], ['bosses', 'bosses.json'],
-  ['stages', 'stages.json'], ['tokens', 'tokens.json'], ['choices', 'choices.json'], ['effects', 'effects.json'],
-  ['garrisons', 'garrisons.json'], ['factions', 'factions.json'], ['local', 'local-assets.json'], ['backups', 'backups.json'],
-].map(([, file]) => `/data/${file}`);
-
-const CORE_URLS = [
-  '/vendor/preact.module.js',
-  '/vendor/hooks.module.js',
-  '/vendor/htm.module.js',
-  '/vendor/pixi.min.js',
-  '/vendor/pixi-spine.js',
-  ...DATA_URLS,
-];
-
-const GROUP_RULES = Object.freeze([
-  { id: 'ui', label: N_('界面与教学素材'), micro: 'UI / GUIDE', match: (u) => /\/(?:fonts\/|assets\/(?:ui|bond|item|band)\/)/.test(u) },
-  { id: 'operators', label: N_('干员资源'), micro: 'OPERATORS', match: (u) => /\/assets\/(?:char|skill|module|prof|spine\/op)\//.test(u) },
-  { id: 'battle', label: N_('敌人与战场'), micro: 'BATTLE', match: (u) => /\/assets\/(?:enemy|token|spine\/(?:enemy|token))\//.test(u) },
-  { id: 'voiceCn', label: N_('中文干员语音'), micro: 'VOICE CN', match: (u) => /\/assets\/audio\/voice\/cn\//.test(u) },
-  { id: 'voiceJp', label: N_('日文干员语音'), micro: 'VOICE JP', match: (u) => /\/assets\/audio\/voice\/jp\//.test(u) },
-  { id: 'audio', label: N_('背景音乐与音效'), micro: 'BGM / SFX', match: (u) => /\/assets\/audio\/(?:bgm|sfx)\//.test(u) },
-  { id: 'local', label: N_('本地客户端素材'), micro: 'LOCAL ART', match: (u) => /\/assets\/local\//.test(u) },
-]);
 
 export const CACHE_GROUPS = Object.freeze([
   { id: 'core', label: N_('运行基础数据'), micro: 'CORE', static: true },
-  ...GROUP_RULES.map(({ id, label, micro }) => ({ id, label, micro })),
+  { id: 'ui', label: N_('界面与教学素材'), micro: 'UI / GUIDE' },
+  { id: 'operators', label: N_('干员资源'), micro: 'OPERATORS' },
+  { id: 'battle', label: N_('敌人与战场'), micro: 'BATTLE' },
+  { id: 'voiceCn', label: N_('中文干员语音'), micro: 'VOICE CN' },
+  { id: 'voiceJp', label: N_('日文干员语音'), micro: 'VOICE JP' },
+  { id: 'audio', label: N_('背景音乐与音效'), micro: 'BGM / SFX' },
+  { id: 'local', label: N_('本地客户端素材'), micro: 'LOCAL ART' },
 ]);
 
 const groupById = new Map(CACHE_GROUPS.map((g) => [g.id, g]));
+const CACHE_SIZE_URL = '/data/cache-sizes.json';
+let resourceSizeIndex = null;
 
 function isAssetUrl(value) {
   return typeof value === 'string' && /^\/(?:assets|fonts)\//.test(value);
@@ -76,26 +60,45 @@ function sameUrl(url) {
   return abs;
 }
 
-function resourceGroup(url) {
-  return GROUP_RULES.find((r) => r.match(url))?.id || 'ui';
+function groupShape(group, urls) {
+  const list = [...urls].sort();
+  const bytes = resourceSizeIndex ? list.reduce((n, url) => n + (resourceSizeIndex.get(normalizeCacheUrl(url)) || 0), 0) : 0;
+  const sizeKnown = !!resourceSizeIndex && list.every((url) => resourceSizeIndex.has(normalizeCacheUrl(url)));
+  return { ...group, urls: list, total: urls.size, cached: 0, bytes, cachedBytes: 0, sizeKnown };
 }
 
-function groupShape(group, urls) {
-  return { ...group, urls: [...urls].sort(), total: urls.size, cached: 0 };
+async function loadResourceSizeIndex() {
+  try {
+    const res = await fetch(CACHE_SIZE_URL, { cache: 'no-cache', credentials: 'same-origin' });
+    if (!res?.ok) throw new Error(`HTTP ${res?.status || '???'}`);
+    const body = await res.json();
+    const files = body && typeof body.files === 'object' ? body.files : null;
+    if (!files) throw new Error('invalid cache size manifest');
+    const next = new Map();
+    for (const [url, bytes] of Object.entries(files)) {
+      const key = normalizeCacheUrl(url);
+      if (key && Number.isFinite(bytes) && bytes >= 0) next.set(key, bytes);
+    }
+    resourceSizeIndex = next;
+  } catch (err) {
+    resourceSizeIndex = null;
+    console.warn('[cache] size manifest unavailable', err?.message || err);
+  }
+  return resourceSizeIndex;
 }
 
 /**
  * Build the current resource groups from the generated manifests.
- * @returns {Promise<Array<{ id: string, label: string, micro: string, urls: string[], total: number, cached: number }>>}
+ * @returns {Promise<Array<{ id: string, label: string, micro: string, urls: string[], total: number, cached: number, bytes: number, cachedBytes: number, sizeKnown: boolean }>>}
  */
 export async function resourceGroups() {
-  await Promise.all([data.load('assets'), data.load('local')]);
+  await Promise.all([data.load('assets'), data.load('local'), loadResourceSizeIndex()]);
   const sets = new Map(CACHE_GROUPS.map((g) => [g.id, new Set()]));
-  for (const url of CORE_URLS) sets.get('core').add(url);
+  for (const url of CACHE_CORE_URLS) sets.get('core').add(url);
   const urls = new Set();
   walkUrls(data.getRaw('assets'), urls);
   walkUrls(data.getRaw('local'), urls);
-  for (const url of urls) sets.get(resourceGroup(url)).add(url);
+  for (const url of urls) sets.get(cacheGroupOf(url)).add(url);
   return CACHE_GROUPS.map((g) => groupShape(g, sets.get(g.id)));
 }
 
@@ -144,7 +147,9 @@ export async function cacheStatus(groups) {
   const stored = new Set(keys.map(keyUrl).filter(Boolean));
   const result = groups.map((g) => {
     const cached = g.urls.reduce((n, u) => n + (stored.has(absoluteUrl(u)) ? 1 : 0), 0);
-    return { ...g, cached };
+    const cachedBytes = g.urls.reduce((n, u) => n + (stored.has(absoluteUrl(u))
+      ? (resourceSizeIndex?.get(normalizeCacheUrl(u)) || 0) : 0), 0);
+    return { ...g, cached, cachedBytes };
   });
   return { supported: !!cache, groups: result, stored: stored.size };
 }
