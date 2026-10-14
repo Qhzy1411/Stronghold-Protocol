@@ -150,8 +150,11 @@ The same master supplies 16/32/48 px PNG / ICO favicons and the 180 px Apple tou
 These project-owned assets live in `public/icons/` and ship in full and lite packages; ASSETS.md records their provenance.
 The install button appears only for a live browser install offer and hides
 in standalone/fullscreen windows or after installation. Every offer is consumed before awaiting the prompt, including
-cancellation or failure. No service worker, offline cache or persistent server is introduced; HTTPS or localhost and
-browser support still govern installation.
+cancellation or failure. The settings dialog also offers an opt-in resource cache (`public/js/cache.js` +
+`public/sw.js`): players select manifest groups, download them with bounded concurrency, and clear the app-owned Cache
+Storage entries. The worker never caches resources automatically. HTTPS or localhost is required for the persistent app
+cache; an insecure LAN address can still warm the browser's ordinary HTTP cache, but cannot report or clear persistent
+entries.
 
 ### Skill-mode sound and delayed models (§28.17, §28.22)
 

@@ -15,8 +15,8 @@
 // Only font-size declarations read `--t`, so the board, the HUD bands the prep camera keeps clear and the detail
 // card's side do not move — the field is sized from the host element's clientWidth (render/app.js).
 
-import { useLayoutEffect, useRef, useState } from '../../vendor/hooks.module.js';
-import { html, Modal, Button, Icon, MicroLabel } from './components.js';
+import { useEffect, useLayoutEffect, useRef, useState } from '../../vendor/hooks.module.js';
+import { html, Modal, Button, Icon, MicroLabel, confirmDialog } from './components.js';
 import { GIcon } from './gameComponents.js';
 import { createStore, useStore, loadPref, savePref, store } from '../store.js';
 import { sanitizeSettings, HOTKEY_ACTIONS, DEFAULT_HOTKEYS, hotkeyLabel, rebindHotkey, isDefaultHotkeys, captureHotkey, VOICE_LANGS, TEXT_SIZES } from './gameLogic.js';
@@ -27,6 +27,9 @@ import { LangToggle, machineTranslationNote } from './lang.js';
 import { t, tc, N_ } from '../../../shared/i18n.js';
 import { errorCount, currentBattle, diagnosticsText } from '../diag.js';
 import { copyText } from './clipboard.js';
+import {
+  resourceGroups, cacheStatus, preloadGroups, clearResourceCache, registerResourceCache, validCacheGroupIds,
+} from '../cache.js';
 
 const cx = (...p) => p.flat().filter(Boolean).join(' ');
 
@@ -234,6 +237,138 @@ function DiagSection() {
 }
 
 /**
+ * Optional persistent resource cache. The normal HTTP cache still works without this section; the app cache is
+ * explicit so a player on a small server can choose whether to spend the bandwidth before entering a match.
+ */
+function CacheSection() {
+  const [groups, setGroups] = useState([]);
+  const [selected, setSelected] = useState(() => validCacheGroupIds(loadPref('cacheGroups', ['core', 'ui'])));
+  const [working, setWorking] = useState(null); // 'load' | 'clear' | null
+  const [progress, setProgress] = useState(null); // { done, total, ok, failed }
+  const [note, setNote] = useState(null); // { text, warn }
+  const [supported, setSupported] = useState(true);
+  const [stored, setStored] = useState(0);
+
+  const refresh = async () => {
+    try {
+      const current = await resourceGroups();
+      const state = await cacheStatus(current);
+      setGroups(state.groups);
+      setSupported(state.supported);
+      setStored(state.stored);
+      return true;
+    } catch (err) {
+      setNote({ warn: true, text: t('无法读取缓存资源清单') });
+      console.warn('[cache] settings refresh failed', err?.message || err);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const sw = await registerResourceCache();
+      const current = await resourceGroups();
+      const state = await cacheStatus(current);
+      if (!alive) return;
+      setGroups(state.groups);
+      setSupported(sw.supported && state.supported);
+      setStored(state.stored);
+    })().catch((err) => {
+      if (alive) setNote({ warn: true, text: t('无法读取缓存资源清单') });
+      console.warn('[cache] settings init failed', err?.message || err);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  const chosen = groups.filter((g) => selected.includes(g.id));
+  const selectedCount = chosen.reduce((n, g) => n + g.total, 0);
+  const setGroup = (id, on) => {
+    const next = validCacheGroupIds(on ? [...selected, id] : selected.filter((x) => x !== id));
+    setSelected(next);
+    savePref('cacheGroups', next);
+  };
+  const start = async () => {
+    if (!chosen.length || working) return;
+    setWorking('load');
+    setProgress({ done: 0, total: selectedCount, ok: 0, failed: 0 });
+    setNote(null);
+    let result;
+    try {
+      result = await preloadGroups(chosen, (p) => setProgress(p));
+    } catch (err) {
+      setWorking(null);
+      setNote({ warn: true, text: t('无法读取缓存资源清单') });
+      console.warn('[cache] preload failed', err?.message || err);
+      return;
+    }
+    const refreshed = await refresh();
+    setWorking(null);
+    if (!refreshed) return;
+    setNote(result.supported
+      ? { warn: result.failed > 0, text: t('已缓存 {ok}/{total} 项资源', { ok: result.ok, total: result.total }) }
+      : { warn: true, text: t('已预加载 {ok}/{total} 项；当前地址不支持应用缓存管理', { ok: result.ok, total: result.total }) });
+  };
+  const clear = async (all = false) => {
+    if (working || (!all && !chosen.length)) return;
+    const ok = await confirmDialog({
+      title: t('清除缓存'),
+      text: t(all ? '将清除本应用的全部资源缓存。下次使用时需要重新下载。' : '将清除所选资源缓存。下次使用时需要重新下载。'),
+      okText: t('清除'),
+      cancelText: t('取消'),
+      danger: true,
+    });
+    if (!ok) return;
+    setWorking('clear');
+    setNote(null);
+    let result;
+    try {
+      result = await clearResourceCache(all ? null : chosen);
+    } catch (err) {
+      setWorking(null);
+      setNote({ warn: true, text: t('无法读取缓存资源清单') });
+      console.warn('[cache] clear failed', err?.message || err);
+      return;
+    }
+    const refreshed = await refresh();
+    setWorking(null);
+    if (!refreshed) return;
+    setNote(result.supported ? { text: t('已清除缓存') } : { warn: true, text: t('当前地址不支持清除应用缓存，请在浏览器设置中清除') });
+  };
+
+  return html`<section class="set-cache" aria-labelledby="set-cache-title">
+    <div class="set-keys__head">
+      <span class="set-row__label" id="set-cache-title"><${Icon} name="download" />${t('资源缓存')}<${MicroLabel}>CACHE<//></span>
+      <${Button} variant="ghost" size="sm" icon="refresh" disabled=${!!working} onClick=${refresh}>${t('刷新状态')}<//>
+    </div>
+    <p class="set-hint">${t('选择要提前下载的资源，缓存会保留在本设备。首次下载建议使用 Wi-Fi。')}</p>
+    ${groups.length ? html`<ul class="set-cache__list">
+      ${groups.map((g) => html`<li key=${g.id} class=${cx('set-cache__row', g.cached === g.total && g.total > 0 && 'is-complete')}>
+        <label class="set-cache__pick">
+          <input type="checkbox" checked=${selected.includes(g.id)} disabled=${!!working}
+            onChange=${(e) => setGroup(g.id, e.currentTarget.checked)} />
+          <span class="set-cache__name">${t(g.label)}<${MicroLabel}>${g.micro}<//></span>
+          <span class="set-cache__count num">${g.cached}/${g.total}</span>
+        </label>
+      </li>`)}
+    </ul>` : html`<p class="set-hint">${t('正在读取资源清单…')}</p>`}
+    <div class="set-cache__actions">
+      <${Button} variant="primary" size="sm" icon="download" disabled=${!!working || !chosen.length || !groups.length}
+        onClick=${start}>${working === 'load' ? t('缓存中…') : t('开始缓存')}<//>
+      <${Button} variant="danger" size="sm" icon="trash" disabled=${!!working || !chosen.length || !groups.length}
+        onClick=${() => clear(false)}>${t('清除所选')}<//>
+      <${Button} variant="ghost" size="sm" icon="trash" disabled=${!!working || stored === 0}
+        onClick=${() => clear(true)}>${t('清除全部')}<//>
+    </div>
+    ${progress && working === 'load' ? html`<p class="set-cache__progress" role="status" aria-live="polite">
+      ${t('已处理 {done}/{total} 项', { done: progress.done, total: progress.total })}
+    </p>` : null}
+    ${!supported ? html`<p class="set-hint set-cache__warning">${t('当前地址不支持持久化应用缓存；仍可尝试预加载浏览器缓存。')}</p>` : null}
+    ${note ? html`<p class=${cx('set-keys__note', note.warn && 'is-warn')} role="status" aria-live="polite">${note.text}</p>` : null}
+  </section>`;
+}
+
+/**
  * Settings modal.
  * @param {{ open: boolean, onClose: Function }} props
  */
@@ -251,6 +386,7 @@ export function SettingsModal({ open, onClose }) {
         <${LangToggle} class="set-lang" />
       </div>
       ${mtNote ? html`<p class="set-hint set-lang-note" data-testid="lang-mt-note">${mtNote}</p>` : null}
+      <${CacheSection} />
       <${Slider} label=${t('背景音乐')} micro="BGM" icon="play" value=${s.bgm} onInput=${(v) => updateSettings({ bgm: v })} />
       <${Slider} label=${t('干员语音')} micro="VOICE" icon="mic" value=${s.voice} onInput=${(v) => updateSettings({ voice: v })} />
       <div class="set-row">

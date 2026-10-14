@@ -39,6 +39,7 @@ import { ToastHost, toast, toastError, describeError } from './ui/toasts.js';
 import { net, identity, NetError } from './net.js';
 import { store, useStore, emptyMatch, selectRoute, sessionResetNotice, isSpectating } from './store.js';
 import { data } from './data.js';
+import { registerResourceCache } from './cache.js';
 import { GAME_FILES } from './ui/gameComponents.js';
 import { TitleScreen, sanitizeName } from './screens/title.js';
 import { LobbyScreen, rememberRoom, parseRoomParam } from './screens/lobby.js';
@@ -63,6 +64,9 @@ const TICKER_KEEP = 20;
 const EMOTE_KEEP = 20;
 
 const SCREENS = { title: TitleScreen, lobby: LobbyScreen, room: RoomScreen, game: GameScreen };
+
+// Install the opt-in resource cache early; it never blocks the first screen or downloads anything by itself.
+void registerResourceCache();
 
 /** Copy of a server message without transport fields. */
 function payload(msg) {

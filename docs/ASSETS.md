@@ -503,6 +503,17 @@ each (`server/http/assetIndex.js`, `server/http/assetViews.js`):
   committed. The views are rebuilt in memory when a manifest or the hashes change; neither file is ever written by the
   server, and the `hash` field is the committed one. The index lives in `.cache/` only and is never packaged.
 
+### Optional player-side preloading
+
+The settings dialog's **资源缓存** section (`public/js/cache.js`) is an opt-in layer for players on a slow host. It
+builds groups from `data/assets.json` and `data/local-assets.json`: core data, UI/tutorial art, operator resources,
+enemy/battle resources, music/SFX, Chinese voices, Japanese voices and local-client art. Selected URLs are downloaded
+with four concurrent requests into a versioned Cache Storage namespace (`public/sw.js`); the worker reads those entries
+but does not cache ordinary requests automatically. A release's `APP_VERSION` changes the namespace, so an update does
+not serve an older app-owned entry. HTTPS or localhost is required for persistent Cache Storage; an HTTP LAN address
+falls back to warming the browser's normal HTTP cache, where the browser controls clearing. The section can clear the
+selected groups or the whole app namespace and does not touch browser data belonging to other sites.
+
 ## Verification
 
 `node --test test/assets.test.js` covers the pure helpers: the resolver, the atlas normalizer, the format sniffers, WOFF2, audio banks, the plan id sets, the downloader against a fake network, and the self-heal of corrupt skeletons.

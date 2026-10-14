@@ -100,7 +100,8 @@ so old imports keep working: `public/js/ui/gameLogic.js` (`public/js/ui/gameLogi
 
 | path | what |
 |---|---|
-| `public/index.html`, `public/js/main.js` | the page and its entry: boot, the router (title → lobby → room → game) |
+| `public/index.html`, `public/js/main.js` | the page and its entry: boot, the router (title → lobby → room → game), early opt-in cache-worker registration |
+| `public/js/cache.js`, `public/sw.js` | the settings resource-cache manager and its versioned service worker; selected manifest URLs only, never automatic offline caching |
 | `public/js/net.js`, `public/js/store.js`, `public/js/data.js` | the socket client, the observable store, the data loader (`/data/*.json`, with the English overlay) |
 | `public/js/battle/` | `runner.js` (the local battle: loads `/sim/`, steps it, reports), `observe.js` (who may watch which field) |
 | `public/js/screens/` | `title.js`, `lobby.js`, `room.js`, `loadout.js` (干员调配), `cultivation.js` (its 潜能 / 练度 controls), `ownership.js` (干员持有), `diy.js` (自选编队), `briefing.js`, `bandDraft.js`, `game.js` with `public/js/screens/game/`, `result.js` |

@@ -1,4 +1,4 @@
-// Install prompts are browser-issued, one-use capabilities. No service worker or application cache is installed.
+// Install prompts are browser-issued, one-use capabilities. The optional resource-cache worker is registered by main.js.
 export function createPwaInstall(win) {
   let prompt = null, installed = false;
   const listeners = new Set();
