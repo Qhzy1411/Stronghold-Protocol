@@ -174,14 +174,6 @@ export const ERR_TEXT = {
 // derived from the id (autochess_battle_fooldoctor_03…06 → pic_fooldoctor_04/05/06/08_battle).
 const emo = (id, sortId, picId, label) => Object.freeze({ id, sortId, picId, label });
 export const EMOTE_THEMES = Object.freeze([
-  { themeId: 'emoticon_originium_slug', dir: 'slug', sortId: 1001, isBasic: false, name: N_('表情套组：虫动'), emotes: [
-    emo('slug_autochess_battle_nice_work', 2001, 'pic_nice_work_battle', N_('合作愉快！')),
-    emo('slug_autochess_battle_thanks', 2002, 'pic_thanks_battle', N_('谢谢！')),
-    emo('slug_autochess_battle_sorry', 2003, 'pic_sorry_battle', N_('对不起！')),
-    emo('slug_autochess_battle_bye', 2004, 'pic_bye_battle', N_('再见！')),
-    emo('slug_autochess_battle_distrust', 2005, 'pic_distrust_battle', '？？？'),
-    emo('slug_autochess_battle_very_soon', 2006, 'pic_very_soon_battle', N_('很快就好！')),
-  ] },
   { themeId: 'emoticon_autochess_basic', dir: 'basic', sortId: 100000, isBasic: true, name: N_('表情套组：卫戍协议'), emotes: [
     emo('autochess_battle_happy', 1001, 'pic_happy_battle', N_('开心')),
     emo('autochess_battle_scared', 1002, 'pic_scared_battle', N_('害怕')),
@@ -198,6 +190,22 @@ export const EMOTE_THEMES = Object.freeze([
     emo('autochess_battle_sad', 1011, 'pic_sad_battle', N_('伤心')),
     emo('autochess_battle_dying', 1012, 'pic_dying_battle', N_('快死了')),
   ] },
+  { themeId: 'emoticon_foolsday_wisdel', dir: 'foolwisdel', sortId: 1004, isBasic: false, name: N_('表情套组：维维美'), emotes: [
+    emo('autochess_battle_foolwisdel_01', 1060, 'pic_foolwisdel_01_battle', N_('维维美 1')),
+    emo('autochess_battle_foolwisdel_02', 1061, 'pic_foolwisdel_02_battle', N_('维维美 2')),
+    emo('autochess_battle_foolwisdel_03', 1062, 'pic_foolwisdel_03_battle', N_('维维美 3')),
+    emo('autochess_battle_foolwisdel_04', 1063, 'pic_foolwisdel_04_battle', N_('维维美 4')),
+    emo('autochess_battle_foolwisdel_05', 1064, 'pic_foolwisdel_05_battle', N_('维维美 5')),
+    emo('autochess_battle_foolwisdel_06', 1065, 'pic_foolwisdel_06_battle', N_('维维美 6')),
+  ] },
+  { themeId: 'emoticon_originium_slug', dir: 'slug', sortId: 1001, isBasic: false, name: N_('表情套组：虫动'), emotes: [
+    emo('slug_autochess_battle_nice_work', 2001, 'pic_nice_work_battle', N_('合作愉快！')),
+    emo('slug_autochess_battle_thanks', 2002, 'pic_thanks_battle', N_('谢谢！')),
+    emo('slug_autochess_battle_sorry', 2003, 'pic_sorry_battle', N_('对不起！')),
+    emo('slug_autochess_battle_bye', 2004, 'pic_bye_battle', N_('再见！')),
+    emo('slug_autochess_battle_distrust', 2005, 'pic_distrust_battle', '？？？'),
+    emo('slug_autochess_battle_very_soon', 2006, 'pic_very_soon_battle', N_('很快就好！')),
+  ] },
   { themeId: 'emoticon_foolsday_doctor', dir: 'fooldoctor', sortId: 1002, isBasic: false, name: N_('表情套组：博士士'), emotes: [
     emo('autochess_battle_fooldoctor_01', 1020, 'pic_fooldoctor_01_battle', N_('博士士 1')),
     emo('autochess_battle_fooldoctor_02', 1021, 'pic_fooldoctor_02_battle', N_('博士士 2')),
@@ -213,14 +221,6 @@ export const EMOTE_THEMES = Object.freeze([
     emo('autochess_battle_foolamiya_04', 1043, 'pic_foolamiya_04_battle', N_('米米子 4')),
     emo('autochess_battle_foolamiya_05', 1044, 'pic_foolamiya_05_battle', N_('米米子 5')),
     emo('autochess_battle_foolamiya_06', 1045, 'pic_foolamiya_06_battle', N_('米米子 6')),
-  ] },
-  { themeId: 'emoticon_foolsday_wisdel', dir: 'foolwisdel', sortId: 1004, isBasic: false, name: N_('表情套组：维维美'), emotes: [
-    emo('autochess_battle_foolwisdel_01', 1060, 'pic_foolwisdel_01_battle', N_('维维美 1')),
-    emo('autochess_battle_foolwisdel_02', 1061, 'pic_foolwisdel_02_battle', N_('维维美 2')),
-    emo('autochess_battle_foolwisdel_03', 1062, 'pic_foolwisdel_03_battle', N_('维维美 3')),
-    emo('autochess_battle_foolwisdel_04', 1063, 'pic_foolwisdel_04_battle', N_('维维美 4')),
-    emo('autochess_battle_foolwisdel_05', 1064, 'pic_foolwisdel_05_battle', N_('维维美 5')),
-    emo('autochess_battle_foolwisdel_06', 1065, 'pic_foolwisdel_06_battle', N_('维维美 6')),
   ] },
 ].map((t) => Object.freeze({ ...t, emotes: Object.freeze(t.emotes) })));
 /** Every emote with its theme: `{ id, sortId, picId, label, themeId, dir }`, in wheel order. */
