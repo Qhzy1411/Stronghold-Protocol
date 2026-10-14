@@ -36,7 +36,7 @@ function toHiddenCore({ mode = 'coop', difficulty = 'NORMAL', humans = 1, client
   });
   if (clientCombat) h.autoHumans();
   h.drive(() => m.phase === PHASE.PREP && m.round === m.gd.bossRound);
-  // Σ activated layers above the hidden-core threshold (solo 350 / co-op 1200), every player
+  // Σ activated layers above the hidden-core threshold (solo 350 / two-seat co-op 800 / larger co-op 1200), every player
   for (const p of m.players.values()) { p.bondCountBonus.yanShip = 3; p.layers.yanShip = 601; p.recompute(); }
   h.drive(() => m.phase === PHASE.HIDDEN_CORE || h.ended != null);
   assert.equal(m.phase, PHASE.HIDDEN_CORE, 'reached the Hidden Core');

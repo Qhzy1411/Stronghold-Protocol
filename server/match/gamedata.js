@@ -43,7 +43,9 @@ export const DEFAULTS = Object.freeze({
   lpCapPerRound: 10,
   bossOvertimeAfter: 150,
   bossOvertimeDrainPerSec: 1,
-  hiddenCore: { single: 350, multi: 1200, minTeamLpExclusive: 1, difficulties: ['NORMAL', 'HARD', 'ABYSS'] },
+  // [ASSUMED] Custom branch rule: exactly two-seat co-op opens Hidden Core above 800 active layers.
+  // Three- and four-seat co-op keeps the official 1200 threshold.
+  hiddenCore: { single: 350, twoPlayer: 800, multi: 1200, minTeamLpExclusive: 1, difficulties: ['NORMAL', 'HARD', 'ABYSS'] },
   dp: { init: 10, perSec: 1, max: 99 },
   unite: { maxHelpers: 2, templates: { 1: 'act1autochess_escaped_single', 2: 'act1autochess_escaped_multi' } },
   timers: { infoCheck: 25, bandDraft: 50, bandTurn: 30, battleCheck: 3, spFirst: 30, spTurn: 16 },
@@ -479,6 +481,7 @@ export class GameData {
     const h = this.config.hiddenCore && typeof this.config.hiddenCore === 'object' ? this.config.hiddenCore : {};
     return {
       single: numOr(h.single, DEFAULTS.hiddenCore.single),
+      twoPlayer: numOr(h.twoPlayer, DEFAULTS.hiddenCore.twoPlayer),
       multi: numOr(h.multi, DEFAULTS.hiddenCore.multi),
       minTeamLpExclusive: numOr(h.minTeamLpExclusive, DEFAULTS.hiddenCore.minTeamLpExclusive),
       difficulties: Array.isArray(h.difficulties) ? h.difficulties : DEFAULTS.hiddenCore.difficulties,

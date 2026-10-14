@@ -32,7 +32,7 @@
 //     (player report after 0.1.0: "隐藏boss还没打就出了造成50%伤害播报").
 //   * Hidden Core eligibility (after an R14 win): difficulty in hiddenCore.difficulties, the mode has a hidden round,
 //     Σ activated layers of the alive players measured at the end of the boss round's prep > threshold (solo 350 /
-//     co-op 1200) and team LP > minTeamLpExclusive (1).
+//     exactly two seats 800 / three or four seats 1200) and team LP > minTeamLpExclusive (1).
 
 import { BOSS_ROW_OFFSET, COLS, BOSS_POOL_MIN_HP } from '../sim/constants.js';
 import { mirrorDir, normDir } from '../sim/dir.js';
@@ -117,12 +117,14 @@ export class SharedBossPool {
 /**
  * Hidden-core eligibility.
  * @param {import('./gamedata.js').GameData} gd
- * @param {{ layerSum: number, teamLp: number }} s
+ * @param {{ layerSum: number, teamLp: number, playerCount?: number }} s
  */
-export function hiddenEligible(gd, { layerSum, teamLp }) {
+export function hiddenEligible(gd, { layerSum, teamLp, playerCount }) {
   const hc = gd.hiddenCore;
   if (!gd.hiddenRound || !hc.difficulties.includes(gd.difficulty)) return false;
-  const threshold = gd.isSolo ? hc.single : hc.multi;
+  // [ASSUMED] The custom branch lowers only the two-seat co-op threshold; 3/4-seat co-op remains at 1200.
+  const seats = Number.isInteger(playerCount) && playerCount > 0 ? playerCount : null;
+  const threshold = gd.isSolo ? hc.single : seats === 2 ? hc.twoPlayer : hc.multi;
   return layerSum > threshold && teamLp > hc.minTeamLpExclusive;
 }
 

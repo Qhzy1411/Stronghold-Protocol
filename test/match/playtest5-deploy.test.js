@@ -128,7 +128,7 @@ describe('#7 the Final Assault prep deploys on the boss field', () => {
       const a = give(m, ps, meleeIds[i]);
       assert.deepEqual(m.handle(pid, { t: 'g.move', uid: a.uid, to: { area: 'board', row: 11, col: 8 } }), { ok: true });
       placed[pid] = a.uid;
-      // Σ activated layers > 1200 (co-op) unlocks the hidden core after the win (finalAssault.test.js)
+      // Σ activated layers > 800 (two-seat co-op) unlocks the hidden core after the win (finalAssault.test.js)
       ps.bondCountBonus.yanShip = 3; ps.layers.yanShip = 601; ps.recompute();
     }
     h.drive(() => m.phase === PHASE.FINAL_ASSAULT);
