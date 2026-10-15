@@ -28,7 +28,7 @@ import { t, tc, N_ } from '../../../shared/i18n.js';
 import { errorCount, currentBattle, diagnosticsText } from '../diag.js';
 import { copyText } from './clipboard.js';
 import {
-  resourceGroups, cacheStatus, preloadGroups, clearResourceCache, registerResourceCache, validCacheGroupIds,
+  resourceGroups, cacheStatus, preloadGroups, importCachePackage, clearResourceCache, registerResourceCache, validCacheGroupIds,
 } from '../cache.js';
 
 const cx = (...p) => p.flat().filter(Boolean).join(' ');
@@ -255,6 +255,7 @@ function formatCacheBytes(bytes) {
  * explicit so a player on a small server can choose whether to spend the bandwidth before entering a match.
  */
 function CacheSection() {
+  const importRef = useRef(null);
   const [groups, setGroups] = useState([]);
   const [selected, setSelected] = useState(() => validCacheGroupIds(loadPref('cacheGroups', ['core', 'ui'])));
   const [working, setWorking] = useState(null); // 'load' | 'clear' | null
@@ -349,6 +350,24 @@ function CacheSection() {
     if (!refreshed) return;
     setNote(result.supported ? { text: t('已清除缓存') } : { warn: true, text: t('当前地址不支持清除应用缓存，请在浏览器设置中清除') });
   };
+  const importPackage = async (event) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file || working) return;
+    setWorking('load');
+    setProgress({ done: 0, total: 0, ok: 0, failed: 0 });
+    setNote(null);
+    try {
+      const result = await importCachePackage(file, (p) => setProgress(p));
+      const refreshed = await refresh();
+      if (refreshed) setNote({ warn: result.failed > 0, text: t('已导入 {ok}/{total} 项缓存资源', { ok: result.ok, total: result.total }) });
+    } catch (err) {
+      setNote({ warn: true, text: t('缓存包导入失败：{reason}', { reason: err?.message || '文件无效' }) });
+      console.warn('[cache] package import failed', err?.message || err);
+    } finally {
+      setWorking(null);
+    }
+  };
 
   return html`<section class="set-cache" aria-labelledby="set-cache-title">
     <div class="set-keys__head">
@@ -369,6 +388,9 @@ function CacheSection() {
     <div class="set-cache__actions">
       <${Button} variant="primary" size="sm" icon="download" disabled=${!!working || !chosen.length || !groups.length}
         onClick=${start}>${working === 'load' ? t('缓存中…') : t('开始缓存')}<//>
+      <${Button} variant="secondary" size="sm" icon="upload" disabled=${!!working || !groups.length}
+        onClick=${() => importRef.current?.click()}>${t('导入缓存包')}<//>
+      <input ref=${importRef} type="file" accept=".zip,application/zip" hidden onChange=${importPackage} />
       <${Button} variant="danger" size="sm" icon="trash" disabled=${!!working || !chosen.length || !groups.length}
         onClick=${() => clear(false)}>${t('清除所选')}<//>
       <${Button} variant="ghost" size="sm" icon="trash" disabled=${!!working || stored === 0}

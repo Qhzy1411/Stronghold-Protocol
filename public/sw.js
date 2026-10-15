@@ -29,7 +29,18 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     // reload/no-cache must reach the server, but successful art responses can still populate the app cache.
     if (request.cache !== 'reload' && request.cache !== 'no-store' && request.cache !== 'no-cache') {
-      const hit = await caches.match(request, { cacheName: CACHE_NAME });
+      let hit = await caches.match(request, { cacheName: CACHE_NAME });
+      if (!hit && cacheable) {
+        const plain = new URL(request.url);
+        const root = ['/assets/', '/fonts/', '/media/'].find((prefix) => plain.pathname.startsWith(prefix));
+        if (root) {
+          const slash = plain.pathname.indexOf('/', root.length);
+          if (slash > 0 && plain.pathname[root.length] === '~') {
+            plain.pathname = root + plain.pathname.slice(slash + 1);
+            hit = await caches.match(plain.href, { cacheName: CACHE_NAME });
+          }
+        }
+      }
       if (hit) return hit;
     }
     const response = await fetch(request);

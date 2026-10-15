@@ -1,8 +1,8 @@
 // Persistent resource cache for the optional Settings → cache manager.
 //
-// The browser's normal HTTP cache remains the first line of defence. This layer is deliberately opt-in: selected
-// same-origin resources are copied into Cache Storage, and sw.js serves those copies on later visits. The cache name
-// includes APP_VERSION so a released update gets a fresh namespace without deleting another site's data.
+// The browser's normal HTTP cache remains the first line of defence. Selected same-origin resources, imported cache
+// packages and successful art downloads are copied into Cache Storage; sw.js serves those copies on later visits.
+// The cache name includes APP_VERSION so a released update gets a fresh namespace without deleting another site's data.
 
 import { APP_VERSION } from '../../shared/constants.js';
 import { N_ } from '../../shared/i18n.js';
@@ -29,6 +29,7 @@ export const CACHE_GROUPS = Object.freeze([
 
 const groupById = new Map(CACHE_GROUPS.map((g) => [g.id, g]));
 const CACHE_SIZE_URL = '/data/cache-sizes.json';
+const CACHE_PACKAGE_NAME = 'sp-cache.json';
 let resourceSizeIndex = null;
 
 function isAssetUrl(value) {
@@ -119,6 +120,90 @@ function keyUrl(req) {
   return absoluteUrl(value);
 }
 
+function zipText(bytes) { return new TextDecoder().decode(bytes); }
+
+async function inflateZip(bytes, method) {
+  if (method === 0) return bytes;
+  if (method !== 8 || typeof DecompressionStream !== 'function') throw new Error('此浏览器不支持该缓存包的压缩格式');
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function readU16(view, at) { return view.getUint16(at, true); }
+function readU32(view, at) { return view.getUint32(at, true); }
+
+/** Read the central directory of a normal ZIP (stored or Deflate entries, no encryption/ZIP64). */
+async function readZip(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const min = Math.max(0, bytes.length - 0x10000 - 22);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= min; i--) if (readU32(view, i) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('不是有效的缓存 ZIP');
+  const count = readU16(view, eocd + 10);
+  const dirSize = readU32(view, eocd + 12);
+  const dirAt = readU32(view, eocd + 16);
+  const out = [];
+  let p = dirAt;
+  for (let i = 0; i < count; i++) {
+    if (readU32(view, p) !== 0x02014b50) throw new Error('缓存 ZIP 目录损坏');
+    const method = readU16(view, p + 10);
+    const compressed = readU32(view, p + 20);
+    const nameLen = readU16(view, p + 28);
+    const extraLen = readU16(view, p + 30);
+    const commentLen = readU16(view, p + 32);
+    const localAt = readU32(view, p + 42);
+    const name = zipText(bytes.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen + extraLen + commentLen;
+    if (!name || name.endsWith('/') || name.includes('..') || name.startsWith('/')) continue;
+    if (readU32(view, localAt) !== 0x04034b50) throw new Error('缓存 ZIP 文件头损坏');
+    const localNameLen = readU16(view, localAt + 26);
+    const localExtraLen = readU16(view, localAt + 28);
+    const start = localAt + 30 + localNameLen + localExtraLen;
+    out.push({ name, method, bytes: await inflateZip(bytes.subarray(start, start + compressed), method) });
+  }
+  if (p < dirAt || dirSize < 0) throw new Error('缓存 ZIP 目录越界');
+  return out;
+}
+
+function packagePath(url) {
+  const path = normalizeCacheUrl(url);
+  if (!path || !/^\/(?:assets|fonts|data|vendor)\//.test(path)) return null;
+  return path.slice(1);
+}
+
+/** Import a cache package produced by tools/cache-package.mjs. */
+export async function importCachePackage(file, onProgress) {
+  const entries = await readZip(file);
+  const manifestEntry = entries.find((entry) => entry.name === CACHE_PACKAGE_NAME);
+  if (!manifestEntry) throw new Error('缓存包缺少 sp-cache.json');
+  const manifest = JSON.parse(zipText(manifestEntry.bytes));
+  if (manifest.format !== 1 || manifest.app !== APP_VERSION || !Array.isArray(manifest.files)) {
+    throw new Error(`缓存包版本不匹配（需要 ${APP_VERSION}）`);
+  }
+  const cache = await openCache();
+  if (!cache) throw new Error('当前地址不支持导入应用缓存');
+  const byName = new Map(entries.map((entry) => [entry.name, entry]));
+  let done = 0, ok = 0, failed = 0;
+  for (const fileInfo of manifest.files) {
+    const url = sameUrl(fileInfo.url);
+    const path = packagePath(fileInfo.url);
+    const entry = path ? byName.get(path) : null;
+    try {
+      if (!url || !entry) throw new Error('文件缺失');
+      await cache.put(url, new Response(entry.bytes, { headers: { 'Content-Type': fileInfo.type || 'application/octet-stream' } }));
+      ok++;
+    } catch (err) {
+      failed++;
+      console.warn('[cache] package entry unavailable', fileInfo.url, err?.message || err);
+    } finally {
+      done++;
+      try { onProgress?.({ done, total: manifest.files.length, ok, failed, url: fileInfo.url }); } catch { /* UI only */ }
+    }
+  }
+  return { supported: true, done, total: manifest.files.length, ok, failed };
+}
+
 /** The audio manager fetches /media/... while manifests list /assets/audio/...mp3. */
 function cacheAliases(url) {
   const abs = absoluteUrl(url);
@@ -127,6 +212,10 @@ function cacheAliases(url) {
   try {
     const parsed = new URL(abs);
     const { hash, path } = splitHashedPath(parsed.pathname);
+    if (hash) {
+      parsed.pathname = path;
+      out.push(parsed.href);
+    }
     if (path.startsWith('/assets/audio/')) {
       const ext = AUDIO_EXTS.find((suffix) => path.toLowerCase().endsWith(suffix));
       if (ext) {

@@ -78,3 +78,8 @@ git restore --staged shared/cacheGroups.js
 ```powershell
 npm config delete registry
 ```
+
+###  生成缓存包
+```powershell
+npm run cache-package
+```
