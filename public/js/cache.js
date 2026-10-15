@@ -9,6 +9,8 @@ import { N_ } from '../../shared/i18n.js';
 import {
   CACHE_CORE_URLS, cacheGroupOf, normalizeCacheUrl,
 } from '../../shared/cacheGroups.js';
+import { splitHashedPath } from '../../shared/assetPaths.js';
+import { AUDIO_EXTS } from '../../shared/media.js';
 import { data } from './data.js';
 
 export const RESOURCE_CACHE_NAME = `sp-preload-${APP_VERSION}`;
@@ -117,6 +119,31 @@ function keyUrl(req) {
   return absoluteUrl(value);
 }
 
+/** The audio manager fetches /media/... while manifests list /assets/audio/...mp3. */
+function cacheAliases(url) {
+  const abs = absoluteUrl(url);
+  if (!abs) return [];
+  const out = [abs];
+  try {
+    const parsed = new URL(abs);
+    const { hash, path } = splitHashedPath(parsed.pathname);
+    if (path.startsWith('/assets/audio/')) {
+      const ext = AUDIO_EXTS.find((suffix) => path.toLowerCase().endsWith(suffix));
+      if (ext) {
+        parsed.pathname = `/media/${hash ? `~${hash}/` : ''}${path.slice('/assets/audio/'.length, -ext.length)}`;
+        out.push(parsed.href);
+      }
+    } else if (path.startsWith('/media/')) {
+      parsed.pathname = `/assets/${hash ? `~${hash}/` : ''}audio/${path.slice('/media/'.length)}`;
+      const ext = AUDIO_EXTS.find((suffix) => parsed.pathname.toLowerCase().endsWith(suffix));
+      if (!ext) return out;
+      parsed.pathname += ext;
+      out.push(parsed.href);
+    }
+  } catch { /* invalid URL already handled by absoluteUrl */ }
+  return out;
+}
+
 /**
  * Register the cache service worker. It is safe to call more than once and deliberately does not block boot.
  * @returns {Promise<{ supported: boolean, registration?: ServiceWorkerRegistration }>}
@@ -146,8 +173,8 @@ export async function cacheStatus(groups) {
   const keys = await cacheKeys(cache);
   const stored = new Set(keys.map(keyUrl).filter(Boolean));
   const result = groups.map((g) => {
-    const cached = g.urls.reduce((n, u) => n + (stored.has(absoluteUrl(u)) ? 1 : 0), 0);
-    const cachedBytes = g.urls.reduce((n, u) => n + (stored.has(absoluteUrl(u))
+    const cached = g.urls.reduce((n, u) => n + (cacheAliases(u).some((key) => stored.has(key)) ? 1 : 0), 0);
+    const cachedBytes = g.urls.reduce((n, u) => n + (cacheAliases(u).some((key) => stored.has(key))
       ? (resourceSizeIndex?.get(normalizeCacheUrl(u)) || 0) : 0), 0);
     return { ...g, cached, cachedBytes };
   });
@@ -227,7 +254,7 @@ export async function clearResourceCache(groups = null) {
   }
   const cache = await openCache();
   if (!cache) return { supported: false, removed: 0 };
-  const wanted = new Set(groups.flatMap((g) => g.urls || []).map(sameUrl).filter(Boolean));
+  const wanted = new Set(groups.flatMap((g) => g.urls || []).flatMap(cacheAliases));
   let removed = 0;
   for (const req of await cacheKeys(cache)) {
     if (wanted.has(keyUrl(req)) && await cache.delete(req)) removed++;

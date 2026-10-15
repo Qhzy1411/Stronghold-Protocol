@@ -1,5 +1,5 @@
-// Optional resource cache worker. It never caches automatically: the settings cache manager writes selected files
-// into Cache Storage, and ordinary requests only read those entries before falling back to the network.
+// Optional resource cache worker. Explicit preloads write selected files into Cache Storage; ordinary successful
+// downloads of art, fonts and media are recorded there too so the settings page reflects normal gameplay.
 
 const VERSION = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE_PREFIX = 'sp-preload-';
@@ -23,10 +23,22 @@ self.addEventListener('fetch', (event) => {
   let url;
   try { url = new URL(request.url); } catch { return; }
   if (url.origin !== self.location.origin) return;
-  // Preserve the app's explicit revalidation requests for data and manifests.
-  if (request.cache === 'reload' || request.cache === 'no-store' || request.cache === 'no-cache') {
-    event.respondWith(fetch(request));
-    return;
-  }
-  event.respondWith(caches.match(request).then((hit) => hit || fetch(request)));
+  const cacheable = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/fonts/')
+    || url.pathname.startsWith('/media/');
+  const mayStore = cacheable && request.cache !== 'no-store' && !request.headers.has('range');
+  event.respondWith((async () => {
+    // reload/no-cache must reach the server, but successful art responses can still populate the app cache.
+    if (request.cache !== 'reload' && request.cache !== 'no-store' && request.cache !== 'no-cache') {
+      const hit = await caches.match(request, { cacheName: CACHE_NAME });
+      if (hit) return hit;
+    }
+    const response = await fetch(request);
+    if (mayStore && response.ok && response.status === 200) {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, response.clone());
+      } catch { /* quota / range / shutdown: the network response still succeeds */ }
+    }
+    return response;
+  })());
 });
